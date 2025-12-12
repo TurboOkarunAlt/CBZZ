@@ -9,12 +9,18 @@ let allComics = [];
 let zoomLevel = 100;
 let fitMode = 'contain';
 let readingDirection = 'ltr';
+let readingFilter = 'normal';
+let spreadMode = false;
+let autoplayInterval = null;
+let autoplaySpeed = 5000;
 
 const libraryView = document.getElementById('library-view');
 const readerView = document.getElementById('reader-view');
 const libraryGrid = document.getElementById('library');
 const emptyLibrary = document.getElementById('empty-library');
 const cbzInput = document.getElementById('cbz-input');
+const exportBtn = document.getElementById('export-btn');
+const importInput = document.getElementById('import-input');
 const searchInput = document.getElementById('search-input');
 const sortSelect = document.getElementById('sort-select');
 const backBtn = document.getElementById('back-btn');
@@ -36,6 +42,18 @@ const zoomOutBtn = document.getElementById('zoom-out');
 const zoomResetBtn = document.getElementById('zoom-reset');
 const zoomLevelDisplay = document.getElementById('zoom-level');
 const readerContainer = document.getElementById('reader-container');
+const helpBtn = document.getElementById('help-btn');
+const helpModal = document.getElementById('help-modal');
+const closeHelp = document.getElementById('close-help');
+const filterBtn = document.getElementById('filter-btn');
+const statsBar = document.getElementById('stats-bar');
+const continueSection = document.getElementById('continue-section');
+const continueCard = document.getElementById('continue-card');
+const randomBtn = document.getElementById('random-btn');
+const favoriteBtn = document.getElementById('favorite-btn');
+const spreadBtn = document.getElementById('spread-btn');
+const autoplayBtn = document.getElementById('autoplay-btn');
+const secondPageImg = document.getElementById('second-page');
 
 async function initDB() {
   return new Promise((resolve, reject) => {
@@ -213,6 +231,13 @@ function renderComicCard(comic) {
   progressBar.style.width = percent + '%';
   progress.appendChild(progressBar);
 
+  if (comic.favorite) {
+    const favBadge = document.createElement('div');
+    favBadge.className = 'favorite-badge';
+    favBadge.textContent = '\u2605';
+    card.appendChild(favBadge);
+  }
+
   card.appendChild(cover);
   card.appendChild(progress);
   card.appendChild(title);
@@ -222,7 +247,60 @@ function renderComicCard(comic) {
 
 async function loadLibrary() {
   allComics = await getAllComics();
+  updateStats();
+  renderContinueReading();
   renderLibrary();
+}
+
+function updateStats() {
+  if (allComics.length === 0) {
+    statsBar.classList.add('hidden');
+    return;
+  }
+  
+  statsBar.classList.remove('hidden');
+  
+  const totalComics = allComics.length;
+  const totalPages = allComics.reduce((sum, c) => sum + (c.totalPages || 0), 0);
+  const inProgress = allComics.filter(c => c.lastRead > 0 && c.lastRead < c.totalPages - 1).length;
+  const completed = allComics.filter(c => c.totalPages > 1 && c.lastRead >= c.totalPages - 1).length;
+  
+  document.getElementById('stat-total').textContent = totalComics;
+  document.getElementById('stat-pages').textContent = totalPages.toLocaleString();
+  document.getElementById('stat-reading').textContent = inProgress;
+  document.getElementById('stat-completed').textContent = completed;
+}
+
+function renderContinueReading() {
+  const inProgress = allComics
+    .filter(c => c.lastRead > 0 && c.lastRead < c.totalPages - 1)
+    .sort((a, b) => new Date(b.addedAt) - new Date(a.addedAt));
+  
+  if (inProgress.length === 0) {
+    continueSection.classList.add('hidden');
+    return;
+  }
+  
+  continueSection.classList.remove('hidden');
+  const comic = inProgress[0];
+  const percent = Math.round((comic.lastRead / (comic.totalPages - 1)) * 100);
+  
+  continueCard.innerHTML = `
+    <img src="${comic.cover}" alt="${comic.title}" class="continue-cover">
+    <div class="continue-info">
+      <div class="continue-title">${comic.title}</div>
+      <div class="continue-progress">
+        <div class="continue-progress-bar">
+          <div class="continue-progress-fill" style="width: ${percent}%"></div>
+        </div>
+        <span>${percent}% - Page ${comic.lastRead + 1} of ${comic.totalPages}</span>
+      </div>
+      <button class="continue-btn">Continue Reading</button>
+    </div>
+  `;
+  
+  continueCard.querySelector('.continue-btn').addEventListener('click', () => openReader(comic));
+  continueCard.querySelector('.continue-cover').addEventListener('click', () => openReader(comic));
 }
 
 function renderLibrary() {
@@ -242,6 +320,12 @@ function renderLibrary() {
       const pa = a.totalPages > 1 ? a.lastRead / (a.totalPages - 1) : 0;
       const pb = b.totalPages > 1 ? b.lastRead / (b.totalPages - 1) : 0;
       return pb - pa;
+    });
+  } else if (sortBy === 'favorites') {
+    filtered.sort((a, b) => {
+      if (a.favorite && !b.favorite) return -1;
+      if (!a.favorite && b.favorite) return 1;
+      return new Date(b.addedAt) - new Date(a.addedAt);
     });
   }
 
@@ -265,6 +349,8 @@ function openReader(comic) {
   currentPageIndex = comic.lastRead || 0;
   zoomLevel = 100;
   fitMode = 'contain';
+  spreadMode = false;
+  stopAutoplay();
 
   pageSlider.max = comic.pages.length;
   pageSlider.value = currentPageIndex + 1;
@@ -272,8 +358,85 @@ function openReader(comic) {
 
   updateFitMode();
   updateZoomDisplay();
+  updateFavoriteBtn();
+  updateSpreadMode();
   showPage(currentPageIndex);
   showView('reader');
+}
+
+function updateFavoriteBtn() {
+  if (currentComic && currentComic.favorite) {
+    favoriteBtn.textContent = '\u2605';
+    favoriteBtn.classList.add('active');
+  } else {
+    favoriteBtn.textContent = '\u2606';
+    favoriteBtn.classList.remove('active');
+  }
+}
+
+async function toggleFavorite() {
+  if (!currentComic) return;
+  currentComic.favorite = !currentComic.favorite;
+  await saveComic(currentComic);
+  updateFavoriteBtn();
+}
+
+function pickRandomComic() {
+  if (allComics.length === 0) {
+    alert('No comics in library!');
+    return;
+  }
+  const randomIndex = Math.floor(Math.random() * allComics.length);
+  openReader(allComics[randomIndex]);
+}
+
+function toggleSpreadMode() {
+  spreadMode = !spreadMode;
+  updateSpreadMode();
+  showPage(currentPageIndex);
+}
+
+function updateSpreadMode() {
+  if (spreadMode) {
+    spreadBtn.textContent = '2P';
+    spreadBtn.classList.add('active');
+    document.getElementById('page-display').classList.add('spread-mode');
+  } else {
+    spreadBtn.textContent = '1P';
+    spreadBtn.classList.remove('active');
+    document.getElementById('page-display').classList.remove('spread-mode');
+    secondPageImg.classList.add('hidden');
+  }
+}
+
+function startAutoplay() {
+  if (autoplayInterval) return;
+  autoplayInterval = setInterval(() => {
+    if (currentComic && currentPageIndex < currentComic.pages.length - 1) {
+      nextPage();
+    } else {
+      stopAutoplay();
+    }
+  }, autoplaySpeed);
+  autoplayBtn.textContent = 'Stop';
+  autoplayBtn.classList.add('active');
+}
+
+function stopAutoplay() {
+  if (autoplayInterval) {
+    clearInterval(autoplayInterval);
+    autoplayInterval = null;
+  }
+  autoplayBtn.textContent = 'Play';
+  autoplayBtn.classList.remove('active');
+}
+
+function toggleAutoplay() {
+  if (autoplayInterval) {
+    stopAutoplay();
+  } else {
+    startAutoplay();
+  }
 }
 
 function showPage(index) {
@@ -293,6 +456,23 @@ function showPage(index) {
 
   currentComic.lastRead = index;
   saveComic(currentComic).catch(() => {});
+  
+  currentPageImg.classList.remove('filter-sepia', 'filter-night', 'filter-warm');
+  if (readingFilter === 'sepia') currentPageImg.classList.add('filter-sepia');
+  else if (readingFilter === 'night') currentPageImg.classList.add('filter-night');
+  else if (readingFilter === 'warm') currentPageImg.classList.add('filter-warm');
+  
+  if (spreadMode && index < currentComic.pages.length - 1) {
+    secondPageImg.src = currentComic.pages[index + 1];
+    secondPageImg.classList.remove('hidden');
+    secondPageImg.classList.remove('filter-sepia', 'filter-night', 'filter-warm');
+    if (readingFilter === 'sepia') secondPageImg.classList.add('filter-sepia');
+    else if (readingFilter === 'night') secondPageImg.classList.add('filter-night');
+    else if (readingFilter === 'warm') secondPageImg.classList.add('filter-warm');
+    pageIndicator.textContent = `${index + 1}-${index + 2} / ${currentComic.pages.length}`;
+  } else {
+    secondPageImg.classList.add('hidden');
+  }
 }
 
 function nextPage() {
@@ -337,6 +517,35 @@ function toggleDirection() {
   readingDirection = readingDirection === 'ltr' ? 'rtl' : 'ltr';
   directionBtn.textContent = readingDirection.toUpperCase();
   readerContainer.classList.toggle('rtl', readingDirection === 'rtl');
+}
+
+function cycleFilter() {
+  const filters = ['normal', 'sepia', 'night', 'warm'];
+  const currentIndex = filters.indexOf(readingFilter);
+  readingFilter = filters[(currentIndex + 1) % filters.length];
+  
+  currentPageImg.classList.remove('filter-sepia', 'filter-night', 'filter-warm');
+  
+  if (readingFilter === 'sepia') {
+    currentPageImg.classList.add('filter-sepia');
+    filterBtn.textContent = 'Sepia';
+  } else if (readingFilter === 'night') {
+    currentPageImg.classList.add('filter-night');
+    filterBtn.textContent = 'Night';
+  } else if (readingFilter === 'warm') {
+    currentPageImg.classList.add('filter-warm');
+    filterBtn.textContent = 'Warm';
+  } else {
+    filterBtn.textContent = 'Normal';
+  }
+}
+
+function openHelpModal() {
+  helpModal.classList.remove('hidden');
+}
+
+function closeHelpModal() {
+  helpModal.classList.add('hidden');
 }
 
 function toggleFullscreen() {
@@ -394,10 +603,99 @@ cbzInput.addEventListener('change', (e) => {
 searchInput.addEventListener('input', renderLibrary);
 sortSelect.addEventListener('change', renderLibrary);
 
-backBtn.addEventListener('click', () => {
+async function exportLibrary() {
+  showLoading('Preparing backup...');
+  try {
+    const comics = await getAllComics();
+    if (comics.length === 0) {
+      alert('No comics to export!');
+      hideLoading();
+      return;
+    }
+    
+    const backup = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      comics: comics
+    };
+    
+    const json = JSON.stringify(backup);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `cbzz-backup-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    hideLoading();
+  } catch (err) {
+    hideLoading();
+    alert('Export failed: ' + err.message);
+  }
+}
+
+async function importLibrary(file) {
+  showLoading('Restoring backup...');
+  try {
+    const text = await file.text();
+    const backup = JSON.parse(text);
+    
+    if (!backup.comics || !Array.isArray(backup.comics)) {
+      throw new Error('Invalid backup file format');
+    }
+    
+    let imported = 0;
+    let skipped = 0;
+    const existingComics = await getAllComics();
+    const existingIds = new Set(existingComics.map(c => c.id));
+    
+    for (const comic of backup.comics) {
+      loadingText.textContent = `Importing ${imported + 1}/${backup.comics.length}...`;
+      
+      if (!comic.id || !comic.title || !comic.pages) {
+        skipped++;
+        continue;
+      }
+      
+      if (existingIds.has(comic.id)) {
+        skipped++;
+        continue;
+      }
+      
+      await saveComic(comic);
+      imported++;
+    }
+    
+    await loadLibrary();
+    hideLoading();
+    alert(`Imported ${imported} comics. ${skipped > 0 ? `Skipped ${skipped} (duplicates or invalid).` : ''}`);
+  } catch (err) {
+    hideLoading();
+    alert('Import failed: ' + err.message);
+  }
+}
+
+exportBtn.addEventListener('click', exportLibrary);
+
+importInput.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (file) {
+    importLibrary(file);
+    e.target.value = '';
+  }
+});
+
+backBtn.addEventListener('click', async () => {
   showView('library');
   currentComic = null;
   resetZoom();
+  readingFilter = 'normal';
+  filterBtn.textContent = 'Normal';
+  await loadLibrary();
 });
 
 deleteBtn.addEventListener('click', async () => {
@@ -419,7 +717,19 @@ pageSlider.addEventListener('input', (e) => {
 
 fitBtn.addEventListener('click', cycleFitMode);
 directionBtn.addEventListener('click', toggleDirection);
+filterBtn.addEventListener('click', cycleFilter);
 fullscreenBtn.addEventListener('click', toggleFullscreen);
+
+helpBtn.addEventListener('click', openHelpModal);
+closeHelp.addEventListener('click', closeHelpModal);
+helpModal.addEventListener('click', (e) => {
+  if (e.target === helpModal) closeHelpModal();
+});
+
+randomBtn.addEventListener('click', pickRandomComic);
+favoriteBtn.addEventListener('click', toggleFavorite);
+spreadBtn.addEventListener('click', toggleSpreadMode);
+autoplayBtn.addEventListener('click', toggleAutoplay);
 
 zoomInBtn.addEventListener('click', () => updateZoom(25));
 zoomOutBtn.addEventListener('click', () => updateZoom(-25));
@@ -446,6 +756,20 @@ document.addEventListener('keydown', (e) => {
     updateZoom(-25);
   } else if (e.key === '0') {
     resetZoom();
+  } else if (e.key === ' ' && !e.repeat) {
+    e.preventDefault();
+    e.stopPropagation();
+    nextPage();
+  } else if (e.key === 'd' || e.key === 'D') {
+    toggleSpreadMode();
+  } else if (e.key === 'p' || e.key === 'P') {
+    toggleAutoplay();
+  }
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !helpModal.classList.contains('hidden')) {
+    closeHelpModal();
   }
 });
 
