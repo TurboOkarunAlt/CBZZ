@@ -19,16 +19,73 @@
           <span>+ Upload</span>
           <input type="file" id="cbz-input" accept=".cbz" multiple hidden>
         </label>
+        <button id="export-btn" class="backup-btn">Export Backup</button>
+        <label for="import-input" class="backup-btn">
+          <span>Import Backup</span>
+          <input type="file" id="import-input" accept=".json" hidden>
+        </label>
+        <button id="help-btn" class="help-btn">?</button>
+        <button id="random-btn" class="random-btn" title="Random Pick">Shuffle</button>
         <input type="text" id="search-input" placeholder="Search comics..." class="search-input">
         <select id="sort-select" class="sort-select">
           <option value="recent">Recently Added</option>
           <option value="title">Title A-Z</option>
           <option value="progress">Reading Progress</option>
+          <option value="favorites">Favorites First</option>
         </select>
       </div>
+      
+      <div id="stats-bar" class="stats-bar hidden">
+        <div class="stat-item">
+          <span class="stat-value" id="stat-total">0</span>
+          <span class="stat-label">Comics</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-value" id="stat-pages">0</span>
+          <span class="stat-label">Pages</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-value" id="stat-reading">0</span>
+          <span class="stat-label">In Progress</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-value" id="stat-completed">0</span>
+          <span class="stat-label">Completed</span>
+        </div>
+      </div>
+      
+      <div id="continue-section" class="continue-section hidden">
+        <h3>Continue Reading</h3>
+        <div id="continue-card" class="continue-card"></div>
+      </div>
+      
       <div id="library" class="library-grid"></div>
       <div id="empty-library" class="empty-state">
         <p>No comics yet. Upload a CBZ file to get started!</p>
+      </div>
+    </div>
+    
+    <div id="help-modal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Keyboard Shortcuts</h2>
+          <button id="close-help" class="close-btn">&times;</button>
+        </div>
+        <div class="shortcuts-grid">
+          <div class="shortcut"><kbd>&larr;</kbd><span>Previous Page</span></div>
+          <div class="shortcut"><kbd>&rarr;</kbd><span>Next Page</span></div>
+          <div class="shortcut"><kbd>F</kbd><span>Fullscreen</span></div>
+          <div class="shortcut"><kbd>+</kbd><span>Zoom In</span></div>
+          <div class="shortcut"><kbd>-</kbd><span>Zoom Out</span></div>
+          <div class="shortcut"><kbd>0</kbd><span>Reset Zoom</span></div>
+          <div class="shortcut"><kbd>Esc</kbd><span>Exit Reader</span></div>
+          <div class="shortcut"><kbd>Space</kbd><span>Next Page</span></div>
+          <div class="shortcut"><kbd>D</kbd><span>Double Page</span></div>
+          <div class="shortcut"><kbd>P</kbd><span>Auto Play</span></div>
+        </div>
+        <div class="modal-footer">
+          <p>Click left/right side of page to navigate</p>
+        </div>
       </div>
     </div>
 
@@ -38,8 +95,12 @@
         <span id="comic-title-display" class="comic-title-header"></span>
         <span id="page-indicator">1 / 1</span>
         <div class="reader-controls">
+          <button id="favorite-btn" class="icon-btn" title="Add to favorites">&#9734;</button>
           <button id="fit-btn" class="icon-btn" title="Toggle fit mode">Fit</button>
+          <button id="spread-btn" class="icon-btn" title="Double page spread">1P</button>
+          <button id="autoplay-btn" class="icon-btn" title="Auto slideshow">Play</button>
           <button id="direction-btn" class="icon-btn" title="Reading direction">LTR</button>
+          <button id="filter-btn" class="icon-btn" title="Reading filter">Normal</button>
           <button id="fullscreen-btn" class="icon-btn" title="Fullscreen">[ ]</button>
           <button id="delete-btn" class="icon-btn danger">Delete</button>
         </div>
@@ -48,6 +109,7 @@
         <button id="prev-btn" class="nav-btn prev">&lt;</button>
         <div id="page-display">
           <img id="current-page" src="" alt="Comic page">
+          <img id="second-page" src="" alt="Comic page 2" class="hidden">
         </div>
         <button id="next-btn" class="nav-btn next">&gt;</button>
       </div>
